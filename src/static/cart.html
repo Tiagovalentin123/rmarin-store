@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}Carrinho de Compras - R.MARIN{% endblock %}
+
+{% block content %}
+<div class="pricing-header p-3 pb-md-4 mx-auto text-center">
+    <h1 class="display-4 fw-normal">Carrinho de Compras</h1>
+</div>
+
+{% if cart_items %}
+<table class="table">
+    <thead>
+        <tr>
+            <th scope="col">Produto</th>
+            <th scope="col">Preço Unitário</th>
+            <th scope="col">Quantidade</th>
+            <th scope="col">Total Item</th>
+            <th scope="col">Ações</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in cart_items %}
+        <tr>
+            <td>
+                <img src="{{ item.product.image_url if item.product.image_url else url_for('static', filename='images/placeholder.png') }}" class="cart-img me-2" alt="{{ item.product.name }}">
+                {{ item.product.name }}
+            </td>
+            <td>R$ {{ "%.2f"|format(item.product.price) }}</td>
+            <td>
+                <form action="{{ url_for('store.update_cart', product_id=item.product.id) }}" method="post" class="d-inline-flex align-items-center">
+                    <input type="number" name="quantity" class="form-control form-control-sm" value="{{ item.quantity }}" min="1" max="{{ item.product.stock }}" style="width: 70px;">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm ms-1">Atualizar</button>
+                </form>
+            </td>
+            <td>R$ {{ "%.2f"|format(item.item_total) }}</td>
+            <td>
+                <form action="{{ url_for('store.remove_from_cart', product_id=item.product.id) }}" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-danger btn-sm">Remover</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr>
+            <td colspan="3" class="text-end"><strong>Total Geral:</strong></td>
+            <td><strong>R$ {{ "%.2f"|format(total_price) }}</strong></td>
+            <td></td>
+        </tr>
+    </tfoot>
+</table>
+
+<div class="d-flex justify-content-end">
+    <a href="{{ url_for('store.catalog') }}" class="btn btn-secondary me-2">Continuar Comprando</a>
+    <a href="{{ url_for('store.checkout') }}" class="btn btn-success">Finalizar Compra</a>
+</div>
+
+{% else %}
+<div class="alert alert-info" role="alert">
+    O seu carrinho está vazio.
+</div>
+<div class="text-center">
+    <a href="{{ url_for('store.catalog') }}" class="btn btn-primary">Ir para o Catálogo</a>
+</div>
+{% endif %}
+
+{% endblock %}
+

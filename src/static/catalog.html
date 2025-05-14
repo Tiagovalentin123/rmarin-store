@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block title %}Catálogo - R.MARIN{% endblock %}
+
+{% block content %}
+<div class="pricing-header p-3 pb-md-4 mx-auto text-center">
+    <h1 class="display-4 fw-normal">Catálogo de Produtos</h1>
+    <p class="fs-5 text-muted">Descubra a nossa coleção exclusiva de beachwear.</p>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for product in products %}
+    <div class="col">
+        <div class="card h-100">
+            <img src="{{ product.image_url if product.image_url else url_for('static', filename='images/placeholder.png') }}" class="card-img-top product-img" alt="{{ product.name }}">
+            <div class="card-body">
+                <h5 class="card-title">{{ product.name }}</h5>
+                <p class="card-text">{{ product.description }}</p>
+                <p class="card-text"><strong>Preço:</strong> R$ {{ "%.2f"|format(product.price) }}</p>
+                <p class="card-text"><small class="text-muted">Stock: {{ product.stock }}</small></p>
+            </div>
+            <div class="card-footer bg-transparent border-top-0">
+                 <form action="{{ url_for('store.add_to_cart', product_id=product.id) }}" method="post" class="d-flex justify-content-between align-items-center">
+                     <div class="input-group" style="width: 120px;">
+                        <span class="input-group-text">Qtd</span>
+                        <input type="number" name="quantity" class="form-control" value="1" min="1" max="{{ product.stock }}" {% if product.stock <= 0 %}disabled{% endif %}>
+                    </div>
+                    <button type="submit" class="btn btn-primary" {% if product.stock <= 0 %}disabled{% endif %}>Adicionar ao Carrinho</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <p>Nenhum produto encontrado no catálogo.</p>
+         <!-- Button to add dummy products if needed for testing -->
+         <!-- <a href="{{ url_for('store.add_dummy_products_route') }}" class="btn btn-secondary">Add Dummy Products</a> -->
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+

@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirmação do Pedido - R.MARIN{% endblock %}
+
+{% block content %}
+<div class="pricing-header p-3 pb-md-4 mx-auto text-center">
+    <h1 class="display-4 fw-normal">Pedido Confirmado!</h1>
+    <p class="fs-5 text-muted">Obrigado pela sua compra!</p>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                Detalhes do Pedido #{{ order.id }}
+            </div>
+            <div class="card-body">
+                <p><strong>Data do Pedido:</strong> {{ order.order_date.strftime('%d/%m/%Y %H:%M') }}</p>
+                <p><strong>Cliente:</strong> {{ order.customer.name }}</p>
+                <p><strong>Email:</strong> {{ order.customer.email }}</p>
+                <p><strong>Telefone:</strong> {{ order.customer.phone }}</p>
+                <p><strong>Endereço de Envio:</strong> {{ order.customer.address }}</p>
+                <p><strong>Status:</strong> {{ order.status }}</p>
+                <p><strong>Valor Total:</strong> R$ {{ "%.2f"|format(order.total_amount) }}</p>
+
+                <h5 class="mt-4">Itens do Pedido:</h5>
+                <ul class="list-group list-group-flush">
+                    {% for item in order.items %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ item.product.name }} ({{ item.quantity }} x R$ {{ "%.2f"|format(item.price) }})
+                        <span>R$ {{ "%.2f"|format(item.quantity * item.price) }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <hr>
+                <p class="text-center">A próxima etapa seria o pagamento (a ser implementado).</p>
+                <div class="text-center mt-4">
+                     <a href="{{ url_for('store.catalog') }}" class="btn btn-primary">Voltar ao Catálogo</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+

@@ -1,0 +1,337 @@
+{% extends 'base.html' %}
+
+{% block title %}Checkout - R.MARIN{% endblock %}
+
+{% block content %}
+<div class="pricing-header p-3 pb-md-4 mx-auto text-center">
+    <h1 class="display-4 fw-normal">Checkout</h1>
+</div>
+
+<div class="row g-5">
+    <div class="col-md-5 col-lg-4 order-md-last">
+        <h4 class="d-flex justify-content-between align-items-center mb-3">
+            <span class="text-primary">Resumo do Pedido</span>
+            <span class="badge bg-primary rounded-pill">{{ cart_items|length }}</span>
+        </h4>
+        <ul class="list-group mb-3">
+            {% for item in cart_items %}
+            <li class="list-group-item d-flex justify-content-between lh-sm">
+                <div>
+                    <h6 class="my-0">{{ item.product.name }}</h6>
+                    <small class="text-muted">Quantidade: {{ item.quantity }}</small>
+                </div>
+                <span class="text-muted">R$ {{ "%.2f"|format(item.item_total) }}</span>
+            </li>
+            {% endfor %}
+            <li class="list-group-item d-flex justify-content-between">
+                <span>Total (BRL)</span>
+                <strong>R$ {{ "%.2f"|format(total_price) }}</strong>
+            </li>
+        </ul>
+    </div>
+    <div class="col-md-7 col-lg-8">
+        <h4 class="mb-3">Informações do Cliente e Envio</h4>
+        <!-- Use a single form for customer info and payment selection -->
+        <form id="payment-form" class="needs-validation" novalidate>
+            <!-- Customer Info -->
+            <div class="row g-3">
+                <div class="col-12">
+                    <label for="name" class="form-label">Nome Completo</label>
+                    <input type="text" class="form-control" id="name" name="name" placeholder="" value="" required>
+                    <div class="invalid-feedback">Nome completo é obrigatório.</div>
+                </div>
+                <div class="col-12">
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email" class="form-control" id="email" name="email" placeholder="voce@exemplo.com" required>
+                    <div class="invalid-feedback">Por favor, insira um endereço de email válido.</div>
+                </div>
+                <div class="col-12">
+                    <label for="phone" class="form-label">Telefone</label>
+                    <input type="tel" class="form-control" id="phone" name="phone" placeholder="(XX) XXXXX-XXXX" required>
+                     <div class="invalid-feedback">Número de telefone é obrigatório.</div>
+                </div>
+                <div class="col-12">
+                    <label for="address" class="form-label">Endereço Completo</label>
+                    <input type="text" class="form-control" id="address" name="address" placeholder="Rua, Número, Bairro, Cidade, Estado, CEP" required>
+                    <div class="invalid-feedback">Endereço de envio é obrigatório.</div>
+                </div>
+            </div>
+
+            <hr class="my-4">
+
+            <!-- Payment Method Selection -->
+            <h4 class="mb-3">Método de Pagamento</h4>
+            <div class="my-3">
+                <div class="form-check">
+                    <input id="stripe" name="paymentMethod" type="radio" class="form-check-input" value="stripe" checked required>
+                    <label class="form-check-label" for="stripe">Cartão de Crédito (Stripe)</label>
+                </div>
+                <div class="form-check">
+                    <input id="mbway" name="paymentMethod" type="radio" class="form-check-input" value="mbway" required>
+                    <label class="form-check-label" for="mbway">MB WAY (Indisponível)</label>
+                </div>
+                <div class="form-check">
+                    <input id="paypal" name="paymentMethod" type="radio" class="form-check-input" value="paypal" required>
+                    <label class="form-check-label" for="paypal">PayPal (Indisponível)</label>
+                </div>
+            </div>
+
+            <!-- Payment Elements Placeholders -->
+            <div id="stripe-payment-element" class="mb-3" style="display: block;">
+                 <!-- Stripe Payment Element will be inserted here -->
+                 <div id="payment-element"></div>
+                 <div id="payment-message" class="text-danger mt-1"></div>
+            </div>
+            <div id="mbway-payment-element" class="mb-3" style="display: none;">
+                <p class="text-muted">A integração MB WAY será implementada futuramente.</p>
+            </div>
+            <div id="paypal-payment-element" class="mb-3" style="display: none;">
+                 <p class="text-muted">A integração PayPal será implementada futuramente.</p>
+            </div>
+
+            <hr class="my-4">
+
+            <button id="submit-button" class="w-100 btn btn-primary btn-lg">
+                <span id="button-text">Finalizar Pedido</span>
+                <span id="spinner" style="display: none;">Processando...</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Stripe.js -->
+<script src="https://js.stripe.com/v3/"></script>
+
+<script>
+    let stripe = null;
+    let elements = null;
+    let clientSecret = null;
+    let currentOrderId = null;
+
+    const form = document.getElementById('payment-form');
+    const submitButton = document.getElementById('submit-button');
+    const spinner = document.getElementById('spinner');
+    const buttonText = document.getElementById('button-text');
+    const messageContainer = document.getElementById('payment-message');
+
+    // --- Initialization ---
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Fetch public key and initialize Stripe
+        try {
+            const { publicKey } = await fetch('/config').then(r => r.json());
+            if (!publicKey || !publicKey.startsWith('pk_test_')) {
+                console.error('Stripe public key not found or invalid.');
+                messageContainer.textContent = 'Erro na configuração de pagamento.';
+                disableSubmit();
+                return;
+            }
+            stripe = Stripe(publicKey);
+            initializeCheckout(); // Initialize elements after getting public key
+        } catch (error) {
+            console.error('Error fetching Stripe config:', error);
+            messageContainer.textContent = 'Erro ao carregar configuração de pagamento.';
+            disableSubmit();
+        }
+
+        // Add event listeners for payment method selection
+        setupPaymentMethodToggle();
+    });
+
+    async function initializeCheckout() {
+        // Only create payment intent and elements if Stripe is selected
+        const selectedMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
+        if (selectedMethod === 'stripe') {
+            try {
+                const response = await fetch('/create-payment-intent', { method: 'POST' });
+                const data = await response.json();
+                if (data.error) {
+                    console.error('Error creating Payment Intent:', data.error);
+                    messageContainer.textContent = 'Erro ao iniciar pagamento: ' + data.error;
+                    disableSubmit();
+                    return;
+                }
+                clientSecret = data.clientSecret;
+                elements = stripe.elements({ clientSecret });
+                const paymentElement = elements.create('payment');
+                paymentElement.mount('#payment-element');
+                enableSubmit(); // Enable submit after elements are ready
+            } catch (error) {
+                console.error('Error creating Payment Intent or Elements:', error);
+                messageContainer.textContent = 'Erro ao iniciar o checkout.';
+                disableSubmit();
+            }
+        }
+    }
+
+    // --- Form Submission Logic ---
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        // Basic Bootstrap validation
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        form.classList.add('was-validated');
+
+        const selectedMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
+
+        setLoading(true);
+        messageContainer.textContent = ''; // Clear previous messages
+
+        // --- Step 1: Place Order (Save Customer/Order Data) ---
+        let orderResponse;
+        try {
+            const formData = new FormData(form);
+            orderResponse = await fetch("{{ url_for('store.place_order') }}", {
+                method: 'POST',
+                body: formData,
+            }).then(res => res.json());
+
+            if (!orderResponse.success) {
+                throw new Error(orderResponse.error || 'Falha ao registar o pedido.');
+            }
+            currentOrderId = orderResponse.orderId;
+            console.log('Order placed successfully, ID:', currentOrderId);
+
+        } catch (error) {
+            console.error('Error placing order:', error);
+            showMessage(error.message || 'Ocorreu um erro ao registar o seu pedido.');
+            setLoading(false);
+            return;
+        }
+
+        // --- Step 2: Handle Payment Confirmation (Based on Method) ---
+        if (selectedMethod === 'stripe') {
+            if (!stripe || !elements || !clientSecret || !currentOrderId) {
+                showMessage('Erro: Pagamento Stripe não inicializado corretamente.');
+                setLoading(false);
+                return;
+            }
+
+            // --- Step 2a: Confirm Stripe Payment ---
+            const { error: stripeError, paymentIntent } = await stripe.confirmPayment({
+                elements,
+                confirmParams: {
+                    // Return URL is not strictly needed here as we handle success/failure below
+                    // return_url: window.location.origin + "{{ url_for('store.order_confirmation', order_id=0) }}".replace('/0', '/' + currentOrderId), // Example, adjust as needed
+                },
+                redirect: 'if_required' // Don't redirect automatically
+            });
+
+            if (stripeError) {
+                console.error('Stripe payment error:', stripeError);
+                showMessage(stripeError.message || 'Ocorreu um erro durante o pagamento.');
+                // Optionally: Update order status to 'Payment Failed' on backend?
+                setLoading(false);
+                return;
+            }
+
+            // --- Step 2b: Update Backend Order Status ---
+            if (paymentIntent && paymentIntent.status === 'succeeded') {
+                try {
+                    const updateResponse = await fetch(`/order/update_payment_status/${currentOrderId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ paymentIntentId: paymentIntent.id, status: paymentIntent.status })
+                    }).then(res => res.json());
+
+                    if (updateResponse.success && updateResponse.redirectUrl) {
+                        // Redirect to confirmation page on success
+                        window.location.href = updateResponse.redirectUrl;
+                    } else {
+                        throw new Error(updateResponse.error || 'Falha ao atualizar o estado do pedido após pagamento.');
+                    }
+                } catch (backendError) {
+                    console.error('Error updating backend:', backendError);
+                    showMessage('Pagamento recebido, mas houve um erro ao finalizar o pedido. Contacte o suporte. ID do Pedido: ' + currentOrderId);
+                    // Don't stop loading here, as payment was likely successful
+                }
+            } else {
+                // Handle other payment intent statuses (e.g., requires_action)
+                showMessage('Estado do pagamento inesperado: ' + (paymentIntent ? paymentIntent.status : 'N/A'));
+                setLoading(false);
+            }
+
+        } else if (selectedMethod === 'mbway' || selectedMethod === 'paypal') {
+            // Placeholder for other methods - show message and stop
+            showMessage(`O método de pagamento ${selectedMethod.toUpperCase()} ainda não está implementado.`);
+            setLoading(false);
+            // In a real scenario, you might redirect to PayPal or show MB WAY instructions here
+            // after the order (currentOrderId) is created.
+        }
+
+        // setLoading(false); // Loading stops on redirect or final message
+    });
+
+    // --- UI Helper Functions ---
+    function setupPaymentMethodToggle() {
+        document.querySelectorAll('input[name="paymentMethod"]').forEach((elem) => {
+            elem.addEventListener("change", function(event) {
+                var method = event.target.value;
+                document.getElementById('stripe-payment-element').style.display = (method === 'stripe') ? 'block' : 'none';
+                document.getElementById('mbway-payment-element').style.display = (method === 'mbway') ? 'block' : 'none';
+                document.getElementById('paypal-payment-element').style.display = (method === 'paypal') ? 'block' : 'none';
+
+                // Re-initialize Stripe elements if Stripe is selected again
+                if (method === 'stripe' && (!elements || !clientSecret)) {
+                    initializeCheckout();
+                } else {
+                    // Disable submit for unavailable methods
+                    if (method !== 'stripe') {
+                        disableSubmit();
+                    } else if (clientSecret) {
+                        enableSubmit();
+                    }
+                }
+            });
+        });
+        // Initial check
+        const initialMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
+        if (initialMethod !== 'stripe') {
+            disableSubmit();
+        }
+    }
+
+    function setLoading(isLoading) {
+        if (isLoading) {
+            submitButton.disabled = true;
+            spinner.style.display = 'inline';
+            buttonText.style.display = 'none';
+        } else {
+            submitButton.disabled = false;
+            spinner.style.display = 'none';
+            buttonText.style.display = 'inline';
+        }
+    }
+
+    function showMessage(message) {
+        messageContainer.textContent = message;
+    }
+
+    function disableSubmit() {
+        submitButton.disabled = true;
+    }
+    function enableSubmit() {
+        // Only enable if not loading
+        if (spinner.style.display === 'none') {
+             submitButton.disabled = false;
+        }
+    }
+
+    // Bootstrap validation script
+    (function () {
+      'use strict'
+      var forms = document.querySelectorAll('.needs-validation')
+      Array.prototype.slice.call(forms)
+        .forEach(function (form) {
+          form.addEventListener('submit', function (event) {
+            // We handle prevention and validation display in our main submit handler
+          }, false)
+        })
+    })()
+
+</script>
+
+{% endblock %}
+
