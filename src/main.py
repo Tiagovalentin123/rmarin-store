@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
-from flask_bootstrap import Bootstrap5 # Import Bootstrap5
+from flask_bootstrap import Bootstrap 
 
 from src.models.models import db, Customer
 from src.routes.store import store_bp
@@ -22,7 +22,7 @@ def create_app():
     app.config["STRIPE_SECRET_KEY"] = os.getenv("STRIPE_SECRET_KEY", "sk_test_YOUR_SECRET_KEY")
 
     # Initialize Bootstrap5
-    bootstrap = Bootstrap5(app)
+   Bootstrap(app) 
 
     db.init_app(app)
 
@@ -50,4 +50,3 @@ if __name__ == "__main__":
     app = create_app()
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host="0.0.0.0", port=port)
-
